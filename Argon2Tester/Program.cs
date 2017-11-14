@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Argon2Managed;
 
 namespace Argon2Managed.Tester
 {
@@ -28,7 +29,6 @@ namespace Argon2Managed.Tester
             {
                 Console.WriteLine("Argon2 Tests ---PASS---");
             }
-
             Console.WriteLine("Press ENTER to exit...");
             Console.ReadLine();
         }
