@@ -189,52 +189,72 @@ namespace Argon2Managed
 	/* Function that securely cleans the memory. This ignores any flags set
 	* regarding clearing memory. Usually one just calls clear_internal_memory.
 	* @param mem Pointer to the memory
-	* @param s Memory size in bytes
+	* These are likely defined in the underlying Blake2 headers
 	*/
-	static __inline void secure_wipe_memory(array<Byte>^ m, size_t n)
+#ifndef METHOD_SECURE_WIPE_BYTES
+#define METHOD_SECURE_WIPE_BYTES
+	static void secure_wipe_memory(array<Byte>^ data)
 	{
-		Byte lm = 0;
-		for (size_t i = 0; i < n; i++)
-		{
-			m[i] &= lm ^ m[i] ^ m[i];
+		if (data == nullptr) return;
+#if !_DEBUG
+		try {
+#endif
+			Byte lm = 0;
+			for (int i = 0; i < data->Length; i++)
+			{
+				data[i] &= lm ^ data[i] ^ data[i];
+			}
+			data[0] ^= data[data->Length - 1];
+#if !_DEBUG
 		}
-		m[0] ^= m[m->Length - 1];
+		catch (...) {}
+#endif
 	}
-	static __inline void secure_wipe_memory(array<UInt64>^ m, size_t n)
+#endif // secure_wipe_bytes
+
+#ifndef METHOD_SECURE_WIPE_QWORDS
+#define METHOD_SECURE_WIPE_QWORDS
+	static void secure_wipe_memory(array<UInt64>^ data)
 	{
-		Byte lm = 0;
-		for (size_t i = 0; i < n; i++)
-		{
-			Buffer::SetByte(m, i, lm & (Byte)m[0]);
+		if (data == nullptr) return;
+#if !_DEBUG
+		try {
+#endif
+			Byte lm = 0;
+			for (int i = 0; i < data->Length * sizeof(UInt64); i++)
+			{
+				Buffer::SetByte(data, i, lm & (Byte)data[0]);
+			}
+			data[0] ^= data[data->Length - 1];
+#if !_DEBUG
 		}
-		m[0] ^= m[m->Length - 1];
+		catch (...) {}
+#endif
 	}
+#endif // secure_wipe_qwords
 
 	/*
-	* Frees memory at the given pointer, uses the appropriate deallocator as
-	* specified in the context. Also cleans the memory using clear_internal_memory.
-	* @param context argon2_context which specifies the deallocator
-	* @param memory pointer to buffer to be freed
-	* @param size the size in bytes for each element to be deallocated
-	* @param num the number of elements to be deallocated
+	* Zero's memory at the given pointer 
 	*/
-	static __inline void free_memory(array<Byte>^ memory)
+	static void free_memory(array<Byte>^ memory)
 	{
-		secure_wipe_memory(memory, memory->Length);
-		delete memory;
+		if (memory == nullptr) return;
+		try { secure_wipe_memory(memory); }
+		catch (...) {}
 	}
-	static __inline void free_memory(array<UInt64>^ memory)
+	static void free_memory(array<UInt64>^ memory)
 	{
-		secure_wipe_memory(memory, memory->Length);
-		delete memory;
+		if (memory == nullptr) return;
+		try { secure_wipe_memory(memory); }
+		catch (...) {}
 	}
-	static __inline void free_memory(array<block^>^ memory)
+	static void free_memory(array<block^>^ memory)
 	{
+		if (memory == nullptr) return;
 		for (int i = 0; i < memory->Length; i++)
 		{
-			secure_wipe_memory(memory[i]->v, memory[i]->v->Length);
+			secure_wipe_memory(memory[i]->v);
 		}
-		delete memory;
 	}
 
 	/*
@@ -470,10 +490,12 @@ namespace Argon2Managed
 			out_buffer = b->ComputeHash((array<const Byte>^)in_buffer);
 			Buffer::BlockCopy(out_buffer, 0, output, outptr, toproduce);
 			delete b;
-			secure_wipe_memory(in_buffer, in_buffer->Length);
-			secure_wipe_memory(out_buffer, out_buffer->Length);
+			secure_wipe_memory(in_buffer);
+			secure_wipe_memory(out_buffer);
 		}
-		delete blake_state;
+		blake_state->Clear();
+		Threading::Thread::MemoryBarrier();
+		blake_state = nullptr;
 		return output;
 	}
 
@@ -522,7 +544,7 @@ namespace Argon2Managed
 		if (context->pwd != nullptr) {
 			Argon2Managed::Blake2b::blake2b_update(BlakeHash, (array<const Byte>^)context->pwd);
 			if (context->flags & ARGON2_FLAG_CLEAR_PASSWORD) {
-				secure_wipe_memory(context->pwd, context->pwd->Length);
+				secure_wipe_memory(context->pwd);
 			}
 		}
 		// salt should never be null
@@ -540,7 +562,7 @@ namespace Argon2Managed
 		if (context->secret != nullptr) {		
 			Argon2Managed::Blake2b::blake2b_update(BlakeHash, (array<const Byte>^)context->secret);
 			if (context->flags & ARGON2_FLAG_CLEAR_SECRET) {
-				secure_wipe_memory(context->secret, context->secret->Length);
+				secure_wipe_memory(context->secret);
 			}
 		}
 		// ad can be null, but the length must still be recorded
@@ -574,7 +596,7 @@ namespace Argon2Managed
 			return ARGON2_INCORRECT_PARAMETER;
 
 		/* 1. Memory allocation */
-		UInt64 memory_size = instance->memory_blocks * ARGON2_BLOCK_SIZE;
+		Int64 memory_size = instance->memory_blocks * ARGON2_BLOCK_SIZE;
 
 		/* 1.1. Check for multiplication overflow */
 		if (instance->memory_blocks != 0 && memory_size / instance->memory_blocks != ARGON2_BLOCK_SIZE) {
@@ -583,7 +605,7 @@ namespace Argon2Managed
 
 		/* 1.2. Try to allocate */
 		instance->memory = gcnew array<block^>(instance->memory_blocks);
-		for (UInt64 i = 0; i < instance->memory->LongLength; i++)
+		for (Int64 i = 0; i < instance->memory->LongLength; i++)
 		{
 			instance->memory[i] = gcnew block();
 			if (instance->memory[i]->v == nullptr)
@@ -619,9 +641,9 @@ namespace Argon2Managed
 		}
 		// Clearing the hash, this is to prevent memory sniffing for pre-images to the larger process 
 		// The password and (optional) secret are included at this point, so this is mandatory
-		secure_wipe_memory(blockhash_bytes, blockhash_bytes->Length);
-		secure_wipe_memory(blockhash, blockhash->Length);
-
+		secure_wipe_memory(blockhash_bytes);
+		secure_wipe_memory(blockhash);
+		Threading::Thread::MemoryBarrier();
 		return ARGON2_OK;
 	}
 
@@ -656,8 +678,8 @@ namespace Argon2Managed
 				Buffer::BlockCopy(blockhash->v, 0, blockhash_bytes, 0, ARGON2_BLOCK_SIZE);
 				instance->context_ptr->out = blake2b_long(instance->context_ptr->outlen, (array<const Byte>^)blockhash_bytes);
 				/* clear blockhash and blockhash_bytes */
-				secure_wipe_memory(blockhash->v, ARGON2_BLOCK_SIZE);
-				secure_wipe_memory(blockhash_bytes, ARGON2_BLOCK_SIZE);
+				secure_wipe_memory(blockhash->v);
+				secure_wipe_memory(blockhash_bytes);
 			}
 
 			free_memory(instance->memory);

@@ -13,22 +13,51 @@ namespace Argon2Managed.Tester
         {
             if (!LoadBlakeTests())
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Blake Tests ***FAIL***");
+                WriteThis("==Blake Tests COMPLETE: ", false, WType.Info);
+                WriteThis(" ***FAIL***", true, WType.Error);
             }
             else
             {
-                Console.WriteLine("Blake Tests ---PASS---");
+                WriteThis("==Blake Tests COMPLETE: ", false, WType.Info);
+                WriteThis(" ---PASS---", true, WType.Awesome);
             }
             if (!LoadArgon2Tests())
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Argon2 Tests ***FAIL***");
+                Console.ForegroundColor = ConsoleColor.Red;
+                WriteThis("==ARGON2 TESTS COMPLETE: ", false, WType.Info);
+                WriteThis(" ***FAIL***", true, WType.Error);
             }
             else
             {
-                Console.WriteLine("Argon2 Tests ---PASS---");
-            }
+                WriteThis("==ARGON2 TESTS COMPLETE: ", false, WType.Info);
+                WriteThis(" ---PASS---", true, WType.Awesome);
+            }//*/
+            WriteThis("==Password Practicality Tests (customized for individual needs, no known answers)");
+            UTF8Encoding utf8 = new UTF8Encoding();
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+            sw.Start();
+            //Adjust these to your liking for testing various parameters.
+            //The ComputerEncodedHash version will output a string showing most of the parameters for some variability in-situ
+            uint t_cost = 2048;
+            uint mem_cost = 96;
+            uint lanes = 6;
+            uint outLength = 8;
+            int ret = Argon2.ComputeEncodedHash(
+                utf8.GetBytes("stufffffffffflongPASSSSSSSSSSSSSSSSS"), // password
+                utf8.GetBytes("So salty.  I really should stop eating Ramen Noodles"), //salt
+                outLength, 
+                Argon2Type.id, // type is Argon2Type.d, .i, or .id, i removes timing attacks but is slightly less secure
+                utf8.GetBytes("shhhhhhh secret"), // secret
+                utf8.GetBytes("The mitochondria are the powerhouse of the cell!"), // additional data
+                t_cost, 
+                mem_cost, 
+                lanes, 
+                out byte[] output,
+                out string encoded);
+            sw.Stop();
+            Console.WriteLine("Time taken: " + sw.Elapsed.ToString() + "\r\n");
+            Console.WriteLine("Encoded Output (next line):\r\n" + encoded);
             Console.WriteLine("Press ENTER to exit...");
             Console.ReadLine();
         }
@@ -40,6 +69,7 @@ namespace Argon2Managed.Tester
             string Result = null;
             string Type = null;
             bool AllGood = true;
+            WriteThis("==BLAKE TESTS===========================================================================", true, WType.Heading);
             foreach (string line in Properties.Resources.TESTS.Split(new string[] { "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries))
             {
                 if (line.Contains("hash")) { Type = line; continue; }
@@ -57,13 +87,13 @@ namespace Argon2Managed.Tester
                     byte[] h = new byte[0];
                     if (Type.Contains("blake2s\""))
                     {
-                        Console.Write("Testing " + Type + ", |Key|=" + KeyBytes.Length + " |Input|=" + InputBytes.Length + " |OutputLength|=" + (Result.Length / 2));
+                        WriteThis("Testing " + Type + ", |Key|=" + KeyBytes.Length + " |Input|=" + InputBytes.Length + " |OutputLength|=" + (Result.Length / 2), false);
                         Blake2s b = new Blake2s(KeyBytes, (byte)(Result.Length / 2));
                         h = b.ComputeHash(InputBytes);
                     }
                     else if (Type.Contains("blake2b\""))
                     {
-                        Console.Write("Testing " + Type + ", |Key|=" + KeyBytes.Length + " |Input|=" + InputBytes.Length + " |OutputLength|=" + (Result.Length / 2));
+                        WriteThis("Testing " + Type + ", |Key|=" + KeyBytes.Length + " |Input|=" + InputBytes.Length + " |OutputLength|=" + (Result.Length / 2), false);
                         Blake2b b = new Blake2b(KeyBytes, (byte)(Result.Length / 2));
                         h = b.ComputeHash(InputBytes);
                     }
@@ -75,16 +105,15 @@ namespace Argon2Managed.Tester
                     }
                     if (BitConverter.ToString(h).Replace("-", "").ToLower() != Result)
                     {
-                        Console.WriteLine("  **FAIL**");
+                        WriteThis("  **FAIL**", true, WType.Error);
                         AllGood = false;
                         break;
                     }
                     else
-                        Console.WriteLine("  --PASS--");
+                        WriteThis("  --PASS--", true, WType.Awesome);
                     Type = Input = Result = Key = null;
                 }
             }
-
 
             return AllGood;
         }
@@ -107,6 +136,7 @@ namespace Argon2Managed.Tester
             //System.Threading.Thread.Sleep(1000);
             byte[] pass1 = ASCIIEncoding.ASCII.GetBytes("password");
             byte[] salt1 = ASCIIEncoding.ASCII.GetBytes("somesalt");
+            WriteThis("==ARGON TESTS===========================================================================", true, WType.Heading);
             argon_test[] tests = new argon_test[]
             {
                 // the following are from the KATS in GitHub for the official repository
@@ -160,7 +190,7 @@ namespace Argon2Managed.Tester
                 testhexresult = Bytes2HexString(output);
                 if (t.hexResult.CompareTo(testhexresult) != 0 || ret != 0)
                 {
-                    Console.WriteLine(" ***FAIL*** RET=" + Argon2.ErrorMessage(ret));
+                    WriteThis(" ***FAIL*** RET=" + Argon2.ErrorMessage(ret), true, WType.Error);
                     return false;
                 }
                 else
@@ -169,12 +199,12 @@ namespace Argon2Managed.Tester
                     ret = Argon2.VerifyEncodedHash(t.pass, t.secret, t.ad, outputString);
                     if ( ret != 0)
                     {
-                        Console.WriteLine(" - COMPUTE PASS/ VERIFY FAIL**** RET=" + Argon2.ErrorMessage(ret));
+                        WriteThis(" -COMPUTE/VERIFY FAIL**** RET=" + Argon2.ErrorMessage(ret), true, WType.Error);
                         return false;
                     }
                     else
                     {
-                        Console.WriteLine(" -COMPUTE/VERIFY PASS- ");
+                         WriteThis(" -COMPUTE/VERIFY PASS- ", true, WType.Awesome);
                     }
                 }
                 GC.Collect();
@@ -198,6 +228,34 @@ namespace Argon2Managed.Tester
             if (input == null) return "";
             string output = BitConverter.ToString(input).Replace("-", "").ToLower();
             return output;
+        }
+
+        public enum WType : byte
+        {
+            Normal = 0,
+            Error = 1,
+            Info = 2,
+            Awesome = 4,
+            Heading = 8
+        }
+
+        static void WriteThis(string message, bool crlf = true, WType type = WType.Normal)
+        {
+            ConsoleColor temp = Console.ForegroundColor;
+
+            switch (type)
+            {
+                case WType.Error: Console.ForegroundColor = ConsoleColor.Red; break;
+                case WType.Awesome: Console.ForegroundColor = ConsoleColor.Green; break;
+                case WType.Heading: Console.ForegroundColor = ConsoleColor.Cyan; break;
+                case WType.Info: Console.ForegroundColor = ConsoleColor.Yellow; break;
+                case WType.Normal:
+                default:
+                    Console.ForegroundColor = ConsoleColor.Gray; break;
+            }
+            Console.Write(message);
+            if (crlf) Console.WriteLine();
+            Console.ForegroundColor = temp;
         }
     }
 }

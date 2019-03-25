@@ -27,6 +27,47 @@ using namespace System;
 
 namespace Argon2Managed
 {
+	void Blake2s::blake2s_update(Blake2sState^ S, array<const Byte>^ data, int position, int length)
+	{
+		int inputPtr = position;
+		int inLen = length;
+		if (position + length > data->Length)
+			throw gcnew IndexOutOfRangeException("Blake2s::update->Indicated position and length are beyond the bounds of the provided array.");
+		if (data->Length == 0 || length == 0) {
+			return;
+		}
+
+		/* Is this a reused state? */
+		if (S->F[0] != 0) {
+			throw gcnew InvalidOperationException("FLAG0");
+		}
+
+		if (S->BufferLen + inLen> BLAKE2S_BLOCKBYTES) {
+			/* Complete current block */
+			int left = S->BufferLen;
+			int fill = BLAKE2S_BLOCKBYTES - left;
+			Buffer::BlockCopy(data, inputPtr, S->Buffer, left, fill);
+
+			S->T[0] += BLAKE2S_BLOCKBYTES;
+			S->T[1] += (S->T[0] < BLAKE2S_BLOCKBYTES);
+
+			blake2s_compress(S, (array<const Byte>^)S->Buffer, 0);
+			S->BufferLen = 0;
+			inLen -= fill;
+			inputPtr += fill;
+			/* Avoid buffer copies when possible */
+			while (inLen > BLAKE2S_BLOCKBYTES) {
+				S->T[0] += BLAKE2S_BLOCKBYTES;
+				S->T[1] += (S->T[0] < BLAKE2S_BLOCKBYTES);
+				blake2s_compress(S, data, inputPtr);
+				inLen -= BLAKE2S_BLOCKBYTES;
+				inputPtr += BLAKE2S_BLOCKBYTES;
+			}
+		}
+		Buffer::BlockCopy(data, inputPtr, S->Buffer, S->BufferLen, inLen);
+		S->BufferLen += (unsigned int)inLen;
+	}
+
 	void Blake2s::blake2s_update(Blake2sState^ S, array<const Byte>^ data)
 	{
 		int inputPtr = 0;
@@ -146,6 +187,21 @@ namespace Argon2Managed
 		if (_isInitialized == false)
 			throw gcnew InvalidOperationException(L"Object not initialized! Call the appropriate Init method first!");
 		blake2s_update(S, data);
+		return blake2s_final(S);
+	}
+
+	void Blake2s::Update(array<const Byte>^ data)
+	{
+		blake2s_update(S, data);
+	}
+
+	void Blake2s::Update(array<const Byte>^ data, int index, int length)
+	{
+		blake2s_update(S, data, index, length);
+	}
+
+	array<Byte>^ Blake2s::Finish()
+	{
 		return blake2s_final(S);
 	}
 

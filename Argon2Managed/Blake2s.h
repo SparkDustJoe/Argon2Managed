@@ -2,7 +2,7 @@
 
 /*
 * Adapted from the reference code implementation
-*   Copyright 2017 Dustin J Sparks
+*   Copyright 2017-2019 Dustin J Sparks
 *   Using CC0 1.0 license, this code is released under the same.
 * ===========================================================================
 * Argon2 reference source code package - reference C implementations
@@ -40,6 +40,51 @@ using namespace System;
 
 namespace Argon2Managed
 {
+	/* Function that securely cleans the memory. This ignores any flags set
+	* regarding clearing memory. Usually one just calls clear_internal_memory.
+	* @param mem Pointer to the memory
+	*/
+#ifndef METHOD_SECURE_WIPE_BYTES
+#define METHOD_SECURE_WIPE_BYTES
+	static void secure_wipe_memory(array<Byte>^ data)
+	{
+		if (data == nullptr) return;
+#if !_DEBUG
+		try {
+#endif
+			Byte lm = 0;
+			for (int i = 0; i < data->Length; i++)
+			{
+				data[i] &= lm ^ data[i] ^ data[i];
+			}
+			data[0] ^= data[data->Length - 1];
+#if !_DEBUG
+			}
+		catch (...) {}
+#endif
+		}
+#endif //secure_wipe_bytes
+
+#ifndef METHOD_SECURE_WIPE_DWORDS
+#define METHOD_SECURE_WIPE_DWORDS
+	static void secure_wipe_memory(array<UInt32>^ data)
+	{
+		if (data == nullptr) return;
+#if !_DEBUG
+		try {
+#endif
+			Byte lm = 0;
+			for (int i = 0; i < data->Length * sizeof(UInt32); i++)
+			{
+				Buffer::SetByte(data, i, lm & (Byte)data[0]);
+			}
+			data[0] ^= data[data->Length - 1];
+#if !_DEBUG
+		}
+		catch (...) {}
+#endif
+	} 
+#endif //secure_wipe_dwords
 
 	/* from the ref C, since we are not doing any tree hashing, we care about '+' of the following:
 	typedef struct __blake2s_param
@@ -97,9 +142,18 @@ namespace Argon2Managed
 
 		}
 
-		~Blake2sState()
+		void Clear()
 		{
 			// MEMORY DESTRUCTION HERE!
+			secure_wipe_memory(H);
+			secure_wipe_memory(M);
+			secure_wipe_memory(T);
+			secure_wipe_memory(F);
+		}
+
+		~Blake2sState()
+		{
+			Clear();
 		}
 	};
 
@@ -110,7 +164,8 @@ namespace Argon2Managed
 		Blake2sState^ S;
 
 		static void blake2s_compress(Blake2sState^ S, array<const Byte>^ block, int start);
-		static void blake2s_update(Blake2sState^ S, array<const Byte>^ block);
+		static void blake2s_update(Blake2sState^ S, array<const Byte>^ block); 
+		static void blake2s_update(Blake2sState^ S, array<const Byte>^ block, int position, int length);
 		static array<Byte>^ blake2s_final(Blake2sState^ S);
 		static Blake2sState^ blake2s_init(array<const Byte>^ key, array<const Byte>^ salt, array<const Byte>^ personalization, Byte outputLenByteCount);
 	public:
@@ -123,6 +178,9 @@ namespace Argon2Managed
 		void Init(array<const Byte>^ key, Byte outputLenByteCount);
 		void Init(array<const Byte>^ key, array<const Byte>^ salt, Byte outputLenByteCount);
 		void Init(array<const Byte>^ key, array<const Byte>^ salt, array<const Byte>^ personalization, Byte outputLenByteCount);
+		void Update(array<const Byte>^ data);
+		void Update(array<const Byte>^ data, int index, int length);
+		array<Byte>^ Finish();
 		array<Byte>^ ComputeHash(array<const Byte>^ data);
 		~Blake2s();
 	};

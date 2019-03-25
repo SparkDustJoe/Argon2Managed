@@ -2,7 +2,7 @@
 
 /*
 * Adapted from the reference code implementation
-*   Copyright 2017 Dustin J Sparks
+*   Copyright 2017-2019 Dustin J Sparks
 *   Using CC0 1.0 license, this code is released under the same.
 * ===========================================================================
 * Argon2 reference source code package - reference C implementations
@@ -105,8 +105,8 @@ namespace Argon2Managed
 	{
 		array<Byte>^ stuff = gcnew array<Byte>(outputLengthBytes);
 		Context^ ctx = gcnew Context();
-		int ret = argon2_hash(password, salt, outputLengthBytes, type, nullptr, nullptr, timeCost, memoryKb, lanes, output, ctx);
-		output = stuff;
+		int ret = argon2_hash(password, salt, outputLengthBytes, type, nullptr, nullptr, timeCost, memoryKb, lanes, stuff, ctx);
+		if (ret == ARGON2_OK) output = stuff; // 0 = ok
 		return ret;
 	}
 
@@ -119,8 +119,10 @@ namespace Argon2Managed
 		array<Byte>^ stuff = gcnew array<Byte>(outputLengthBytes);
 		Context^ ctx;
 		int ret = argon2_hash(password, salt, outputLengthBytes, type, nullptr, nullptr, timeCost, memoryKb, lanes, stuff, ctx);
-		output = stuff;
-		encodedOutput = encode_string(ctx);
+		if (ret == ARGON2_OK) {
+			output = stuff;
+			encodedOutput = encode_string(ctx);
+		}
 		return ret;
 	}
 
@@ -135,7 +137,7 @@ namespace Argon2Managed
 		array<Byte>^ stuff = gcnew array<Byte>(outputLengthBytes);
 		Context^ ctx = gcnew Context();
 		int ret = argon2_hash(password, salt, outputLengthBytes, type, secret, additionalData, timeCost, memoryKb, lanes, stuff, ctx);
-		output = stuff;
+		if (ret == ARGON2_OK) output = stuff;
 		return ret;
 	}
 
@@ -150,8 +152,10 @@ namespace Argon2Managed
 		array<Byte>^ stuff = gcnew array<Byte>(outputLengthBytes);
 		Context^ ctx = gcnew Context();
 		int ret = argon2_hash(password, salt, outputLengthBytes, type, secret, additionalData, timeCost, memoryKb, lanes, stuff, ctx);
-		encodedOutput = encode_string(ctx);
-		output = stuff;
+		if (ret == ARGON2_OK) {
+			output = stuff;
+			encodedOutput = encode_string(ctx);
+		}
 		return ret;
 	}
 

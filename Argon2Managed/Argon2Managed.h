@@ -2,7 +2,7 @@
 
 /*
 * Adapted from the reference code implementation
-*   Copyright 2017 Dustin J Sparks
+*   Copyright 2017-2019 Dustin J Sparks
 *   Using CC0 1.0 license, this code is released under the same.
 * ===========================================================================
 * Argon2 reference source code package - reference C implementations
